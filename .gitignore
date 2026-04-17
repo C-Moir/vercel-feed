@@ -1,0 +1,4 @@
+node_modules/
+.env
+threat-intel.json
+threat-intel-archive-*.json
