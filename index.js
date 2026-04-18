@@ -77,36 +77,26 @@ async function processEntry(entry) {
     return;
   }
 
-  // URLScan deep scan + screenshot in parallel
-  const [scanResult, screenshotResult] = await Promise.all([
-    submitUrlscan(entry.url, URLSCAN_KEY).then(uuid => uuid ? pollUrlscan(uuid) : null),
-    getScreenshot(entry.url)
-  ]);
-
-  const scan = extractScanData(scanResult);
+  // URLScan deep scan
+  const uuid = await submitUrlscan(entry.url, URLSCAN_KEY);
+  const result = uuid ? await pollUrlscan(uuid) : null;
+  const scan = extractScanData(result);
   const status = !scan ? 'clean' : scan.score > 50 ? 'suspicious' : 'clean';
 
-  const meta = extractFromUrlscan(scanResult);
+  const meta = extractFromUrlscan(result);
   meta.favicon = await fetchFavicon(entry.url);
 
-  const dom = scanResult?.dom || '';
-  const headers = scanResult?.data?.requests?.[0]?.response?.headers || {};
+  const dom = result?.dom || '';
+  const headers = result?.data?.requests?.[0]?.response?.headers || {};
 
   const patch = {
     status,
     scan: {
       urlhausFlagged: false,
       urlscanScore: scan?.score ?? 0,
-      urlscanId: scan?.urlscanId,
+      urlscanId: scan?.urlscanId || uuid,
       urlscanScreenshot: scan?.screenshot || null
     },
-    // Prefer URLScan screenshot for suspicious, our own for clean
-    screenshot: status === 'suspicious' && scan?.screenshot
-      ? scan.screenshot
-      : screenshotResult.screenshot,
-    screenshotSource: status === 'suspicious' && scan?.screenshot
-      ? 'urlscan'
-      : screenshotResult.source,
     meta,
     framework: detectFramework(dom, headers),
     aiTool: detectAiTool(dom),
@@ -118,7 +108,14 @@ async function processEntry(entry) {
   };
   queue.update(entry.id, patch);
 
-  if (status === 'suspicious') await sendWebhook(queue.all.get(entry.id), WEBHOOK_URL);
+  // Screenshot: use URLScan's if suspicious (already captured), otherwise fetch our own
+  if (status === 'suspicious') {
+    await sendWebhook(queue.all.get(entry.id), WEBHOOK_URL);
+    queue.update(entry.id, { screenshot: scan?.screenshot, screenshotSource: 'urlscan' });
+  } else {
+    const { screenshot, source } = await getScreenshot(entry.url);
+    queue.update(entry.id, { screenshot, screenshotSource: source });
+  }
 
   broadcaster.broadcast(queue.all.get(entry.id));
 }
@@ -164,6 +161,26 @@ app.listen(PORT, () => {
 });
 
 for (let i = 0; i < 3; i++) runWorker();
+
+// Seed queue with known public Vercel deployments so the UI has data on startup
+// (certstream / crt.sh may be slow to produce entries on first boot)
+const SEED_HOSTNAMES = [
+  'swr.vercel.app',
+  'nextjs-blog.vercel.app',
+  'react-tweet.vercel.app',
+  'ai-sdk-preview.vercel.app',
+  'geist-font.vercel.app',
+  'nextjs-commerce.vercel.app',
+  'next-blog-starter.vercel.app',
+  'nextjs-portfolio.vercel.app',
+  'examples-nextjs.vercel.app',
+  'vercel-storage.vercel.app',
+];
+
+for (const hostname of SEED_HOSTNAMES) {
+  const entry = queue.push(hostname);
+  if (entry) broadcaster.broadcast(entry);
+}
 
 setInterval(() => {
   broadcaster.broadcastStats(computeStats(queue.getAll()));
