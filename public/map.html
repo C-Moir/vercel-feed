@@ -87,9 +87,9 @@
 
   /* CSS2D platform labels */
   .platform-label {
-    color: #666; font-size: 11px; letter-spacing: 1px;
+    color: #ccd; font-size: 12px; letter-spacing: 2px; font-weight: 600;
     text-transform: uppercase; white-space: nowrap;
-    text-shadow: 0 0 8px rgba(0,0,0,0.9);
+    text-shadow: 0 0 12px rgba(100,100,255,0.8), 0 0 4px rgba(0,0,0,1);
     pointer-events: none; user-select: none;
   }
 </style>
@@ -161,28 +161,28 @@ const PLATFORMS = [
 ];
 
 const STATUS_COLOR = {
-  pending:    0x1a1a2e,
-  scanning:   0x336699,
-  clean:      0x2d8a2d,
-  suspicious: 0xff8c00,
-  flagged:    0xff2222,
-  '404':      0x111111,
+  pending:    0x3344aa,
+  scanning:   0x44aaff,
+  clean:      0x44ff88,
+  suspicious: 0xffaa00,
+  flagged:    0xff3333,
+  '404':      0x333355,
 };
 const STATUS_EMISSIVE = {
-  pending:    0x050510,
-  scanning:   0x112233,
-  clean:      0x0a1a0a,
-  suspicious: 0x331a00,
-  flagged:    0x440000,
-  '404':      0x000000,
+  pending:    0x111144,
+  scanning:   0x1155aa,
+  clean:      0x115533,
+  suspicious: 0x885500,
+  flagged:    0xaa1111,
+  '404':      0x111122,
 };
 const STATUS_SIZE = {
-  pending:    0.18,
-  scanning:   0.22,
-  clean:      0.24,
-  suspicious: 0.34,
-  flagged:    0.48,
-  '404':      0.12,
+  pending:    0.22,
+  scanning:   0.28,
+  clean:      0.30,
+  suspicious: 0.42,
+  flagged:    0.58,
+  '404':      0.15,
 };
 
 const CLUSTER_RING_R = 65;
@@ -193,7 +193,7 @@ const CLUSTER_SPREAD = 14;
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setClearColor(0x020205);
+renderer.setClearColor(0x05050f);
 document.body.appendChild(renderer.domElement);
 
 const labelRenderer = new CSS2DRenderer();
@@ -204,7 +204,7 @@ labelRenderer.domElement.style.pointerEvents = 'none';
 document.body.appendChild(labelRenderer.domElement);
 
 const scene = new THREE.Scene();
-scene.fog = new THREE.FogExp2(0x020205, 0.006);
+scene.fog = new THREE.FogExp2(0x05050f, 0.002);
 
 const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 1000);
 camera.position.set(0, 40, 120);
@@ -218,10 +218,13 @@ controls.autoRotate = true;
 controls.autoRotateSpeed = 0.3;
 
 // Lighting
-scene.add(new THREE.AmbientLight(0x111122, 2));
-const dirLight = new THREE.DirectionalLight(0x8888ff, 0.4);
+scene.add(new THREE.AmbientLight(0x334466, 4));
+const dirLight = new THREE.DirectionalLight(0xaabbff, 1.2);
 dirLight.position.set(1, 2, 1);
 scene.add(dirLight);
+const dirLight2 = new THREE.DirectionalLight(0x6644ff, 0.6);
+dirLight2.position.set(-1, -1, -2);
+scene.add(dirLight2);
 
 // Starfield background
 const starGeom = new THREE.BufferGeometry();
@@ -229,7 +232,7 @@ const starCount = 3000;
 const starPos = new Float32Array(starCount * 3);
 for (let i = 0; i < starCount * 3; i++) starPos[i] = (Math.random() - 0.5) * 600;
 starGeom.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
-const starMat = new THREE.PointsMaterial({ color: 0x334455, size: 0.3, sizeAttenuation: true });
+const starMat = new THREE.PointsMaterial({ color: 0x8899cc, size: 0.4, sizeAttenuation: true });
 scene.add(new THREE.Points(starGeom, starMat));
 
 // ─── Platform clusters ────────────────────────────────────────────────────────
@@ -247,13 +250,13 @@ PLATFORMS.forEach((p, i) => {
 
   // Cluster core — dim glowing sphere
   const coreGeom = new THREE.SphereGeometry(1.5, 16, 16);
-  const coreMat = new THREE.MeshBasicMaterial({ color: p.color, transparent: true, opacity: 0.15 });
+  const coreMat = new THREE.MeshBasicMaterial({ color: p.color, transparent: true, opacity: 0.5 });
   const core = new THREE.Mesh(coreGeom, coreMat);
   core.position.copy(pos);
   scene.add(core);
 
-  // Dim point light at cluster
-  const light = new THREE.PointLight(p.color, 0.6, 30);
+  // Point light at cluster
+  const light = new THREE.PointLight(p.color, 2.5, 50);
   light.position.copy(pos);
   scene.add(light);
   clusterLights.push(light);
@@ -276,11 +279,14 @@ Object.entries(STATUS_SIZE).forEach(([status, r]) => {
 });
 
 function makeMaterial(status) {
-  return new THREE.MeshPhongMaterial({
+  return new THREE.MeshStandardMaterial({
     color: STATUS_COLOR[status],
     emissive: STATUS_EMISSIVE[status],
+    emissiveIntensity: status === 'flagged' ? 1.5 : status === 'suspicious' ? 1.0 : 0.8,
+    roughness: 0.3,
+    metalness: 0.4,
     transparent: true,
-    opacity: status === '404' ? 0.3 : 0.9,
+    opacity: status === '404' ? 0.4 : 1.0,
   });
 }
 const MATS = {};

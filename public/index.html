@@ -121,8 +121,8 @@
 </div>
 
 <div id="filters">
-  <button class="filter-btn active" data-filter="previews">Previews</button>
-  <button class="filter-btn" data-filter="all">All</button>
+  <button class="filter-btn active" data-filter="all">All</button>
+  <button class="filter-btn" data-filter="previews">Previews</button>
   <button class="filter-btn" data-filter="clean">Clean</button>
   <button class="filter-btn" data-filter="suspicious">Suspicious</button>
   <button class="filter-btn" data-filter="flagged">Flagged</button>
@@ -144,7 +144,7 @@
 
 <script>
 const entries = new Map();
-let activeFilter = 'previews';
+let activeFilter = 'all';
 let searchQuery = '';
 
 function el(tag, attrs, text) {
