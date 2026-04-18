@@ -26,9 +26,25 @@ const WEBHOOK_URL = process.env.WEBHOOK_URL || null;
 const queue = new JobQueue();
 const broadcaster = new Broadcaster();
 
+async function preflight404(url) {
+  try {
+    const res = await fetch(url, { method: 'HEAD', signal: AbortSignal.timeout(8_000), redirect: 'follow' });
+    return res.status === 404;
+  } catch (_) {
+    return false;
+  }
+}
+
 async function processEntry(entry) {
   queue.update(entry.id, { status: 'scanning' });
   broadcaster.broadcast(queue.all.get(entry.id));
+
+  // Skip dead deployments - saves URLScan credits and keeps feed clean
+  if (await preflight404(entry.url)) {
+    queue.update(entry.id, { status: '404' });
+    broadcaster.broadcast(queue.all.get(entry.id));
+    return;
+  }
 
   // URLhaus fast check
   const { flagged } = await checkUrlhaus(entry.url);

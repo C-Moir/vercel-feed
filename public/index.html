@@ -93,6 +93,7 @@
   <button class="filter-btn" data-filter="clean">Clean</button>
   <button class="filter-btn" data-filter="suspicious">Suspicious</button>
   <button class="filter-btn" data-filter="flagged">Flagged</button>
+  <button class="filter-btn" data-filter="404">404</button>
   <input id="search" type="text" placeholder="Search...">
   <a href="/rss" class="filter-btn" target="_blank" rel="noopener">RSS</a>
 </div>
@@ -214,7 +215,9 @@ function upsertCard(entry) {
 
 function applyFilters() {
   document.querySelectorAll('.card').forEach(card => {
-    const matchFilter = activeFilter === 'all' || card.dataset.status === activeFilter;
+    const matchFilter = activeFilter === 'all'
+      ? card.dataset.status !== '404'
+      : card.dataset.status === activeFilter;
     const matchSearch = !searchQuery
       || card.dataset.hostname.includes(searchQuery)
       || card.dataset.title.includes(searchQuery);
