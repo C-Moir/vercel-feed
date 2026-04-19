@@ -73,6 +73,26 @@ CT logs are public infrastructure operated by Google, Cloudflare, DigiCert and o
 
 Page content is scanned via URLScan.io's sandboxed environment. The tool never directly fetches flagged or suspicious deployment URLs.
 
+## Responsible Use
+
+This tool reads public infrastructure. A few things worth being clear about:
+
+**What it does:** Reads TLS certificate metadata from public CT logs. Scans URLs via URLScan.io's sandboxed environment. Never visits flagged sites directly.
+
+**What it doesn't do:** Scrape private data, access anything behind auth, or store personal information. Every cert this reads was already publicly logged before this tool existed.
+
+**What you should do:**
+- Don't use the abuse reporting feature to harass legitimate deployments
+- Don't automate requests to crt.sh beyond the built-in rate limits
+- Report genuine abuse through the tool's URLScan links, not by directly accessing flagged sites
+- If you find a security vulnerability in a deployment you discover here, follow responsible disclosure
+
+CT log monitoring is standard practice in security research. This tool makes it accessible.
+
 ## Contributing
 
 See CONTRIBUTING.md to add AI tool or framework detection signatures.
+
+## Licence
+
+MIT - see [LICENCE](./LICENCE)

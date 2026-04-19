@@ -21,4 +21,82 @@ const FRAMEWORKS = [
   { name: 'Astro',     htmlPattern: /\/_astro\//i },
 ];
 
-module.exports = { AI_TOOLS, FRAMEWORKS };
+// Content categories — detected from DOM text + meta tags
+// Each entry: { tag, label, emoji, patterns: [regex...] }
+// A deployment gets tagged if ANY pattern matches. Multiple tags allowed.
+const CONTENT_CATEGORIES = [
+  {
+    tag: 'crypto',
+    label: 'Crypto/Web3',
+    emoji: '🪙',
+    patterns: [
+      /\b(crypto|defi|nft|web3|blockchain|token|wallet|dex|dao|staking|airdrop|mint|ethereum|solana|bitcoin)\b/i,
+    ],
+  },
+  {
+    tag: 'ai-app',
+    label: 'AI App',
+    emoji: '🤖',
+    patterns: [
+      /\b(ai (chat|assistant|agent|tool|model|image|voice)|chatbot|llm|gpt|claude|gemini|openai|anthropic)\b/i,
+    ],
+  },
+  {
+    tag: 'ecommerce',
+    label: 'E-commerce',
+    emoji: '🛍️',
+    patterns: [
+      /\b(shop|store|buy now|add to cart|checkout|shipping|product|marketplace|order now)\b/i,
+    ],
+  },
+  {
+    tag: 'game',
+    label: 'Game',
+    emoji: '🎮',
+    patterns: [
+      /\b(game|play now|arcade|leaderboard|multiplayer|level|quest|rpg|puzzle|score)\b/i,
+    ],
+  },
+  {
+    tag: 'saas',
+    label: 'SaaS/Tool',
+    emoji: '🔧',
+    patterns: [
+      /\b(dashboard|analytics|api|saas|subscription|pricing plan|free trial|sign up|log in)\b/i,
+    ],
+  },
+  {
+    tag: 'portfolio',
+    label: 'Portfolio',
+    emoji: '🎨',
+    patterns: [
+      /\b(portfolio|my work|case stud|freelance|hire me|designer|developer|resume|cv)\b/i,
+    ],
+  },
+  {
+    tag: 'blog',
+    label: 'Blog/Media',
+    emoji: '📰',
+    patterns: [
+      /\b(blog|article|newsletter|podcast|news|post|read more|latest post)\b/i,
+    ],
+  },
+  {
+    tag: 'adult',
+    label: 'Adult',
+    emoji: '🔞',
+    patterns: [
+      /\b(porn|xxx|adult content|onlyfans|nsfw|18\+|explicit)\b/i,
+    ],
+  },
+  {
+    tag: 'template',
+    label: 'Starter/Template',
+    emoji: '🏗️',
+    patterns: [
+      /\b(starter|boilerplate|template|hello world|coming soon|under construction|my app|vite \+ react)\b/i,
+    ],
+  },
+];
+
+module.exports = { AI_TOOLS, FRAMEWORKS, CONTENT_CATEGORIES };

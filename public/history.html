@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>vercel-feed — history</title>
+<title>deploy-feed - history</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { background: #0d0d14; color: #ccc; font-family: monospace; font-size: 13px; }
@@ -12,9 +12,24 @@
     display: flex; align-items: center; gap: 16px;
     padding: 12px 20px; border-bottom: 1px solid #1e1e2e;
     position: sticky; top: 0; background: #0d0d14; z-index: 10;
+    flex-wrap: wrap;
   }
   header a { color: #6c63ff; text-decoration: none; font-size: 12px; }
   header a:hover { text-decoration: underline; }
+
+  #date-tabs {
+    display: flex; gap: 6px; flex-wrap: wrap; align-items: center;
+    padding: 8px 20px; border-bottom: 1px solid #111;
+    background: #0a0a12; position: sticky; top: 49px; z-index: 9;
+  }
+  .date-tab {
+    background: #1a1a2e; border: 1px solid #222; color: #666;
+    padding: 3px 12px; border-radius: 12px; cursor: pointer;
+    font-size: 11px; font-family: monospace;
+  }
+  .date-tab.active { border-color: #6c63ff; color: #6c63ff; }
+  .date-tab:hover { border-color: #4a4a88; color: #aaa; }
+
   #search {
     margin-left: auto; background: #1a1a2e; border: 1px solid #2a2a3e;
     color: #ccc; padding: 5px 10px; border-radius: 20px; font-family: monospace;
@@ -26,34 +41,41 @@
   #list { padding: 0; }
 
   .row {
-    display: flex; align-items: center; gap: 12px;
-    padding: 9px 20px; border-bottom: 1px solid #111;
-    position: relative; cursor: default;
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 20px; border-bottom: 1px solid #0f0f16;
+    position: relative;
   }
-  .row:hover { background: #12121e; }
+  .row:hover { background: #10101c; }
 
-  .ts { color: #444; min-width: 130px; font-size: 11px; }
-
-  .platform { color: #444; min-width: 70px; font-size: 11px; }
+  .ts { color: #444; min-width: 80px; font-size: 11px; flex-shrink: 0; }
+  .platform { color: #444; min-width: 70px; font-size: 11px; flex-shrink: 0; }
 
   .hostname {
-    color: #a0a0cc; flex: 1; overflow: hidden;
+    color: #a0a0cc; min-width: 0; flex: 1; overflow: hidden;
     text-overflow: ellipsis; white-space: nowrap;
   }
   .hostname a { color: inherit; text-decoration: none; }
   .hostname a:hover { color: #6c63ff; text-decoration: underline; }
 
-  .title { color: #555; flex: 1.5; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+  .title {
+    color: #555; flex: 1.5; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap; font-size: 11px;
+  }
+
+  .row-badges { display: flex; gap: 4px; flex-shrink: 0; flex-wrap: nowrap; }
 
   .badge {
-    font-size: 10px; padding: 2px 7px; border-radius: 10px;
-    font-weight: bold; min-width: 56px; text-align: center;
+    font-size: 10px; padding: 1px 6px; border-radius: 8px;
+    font-weight: bold; white-space: nowrap;
   }
   .badge-clean      { background: #1a3a1a; color: #4caf50; }
   .badge-suspicious { background: #3a2a00; color: #ff9800; }
   .badge-flagged    { background: #3a1a1a; color: #f44336; }
-  .badge-404        { background: #1e1e1e; color: #555; }
+  .badge-404        { background: #111; color: #444; }
   .badge-scanning   { background: #1a1a3a; color: #6c63ff; }
+  .badge-ai-tool    { background: #1a002e; color: #c084fc; }
+  .badge-framework  { background: #1a1a2e; color: #6c63ff; }
+  .badge-tag        { background: #111; color: #666; border: 1px solid #1a1a2e; }
 
   /* Hover preview */
   .preview {
@@ -68,19 +90,23 @@
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
 
-  #empty { padding: 60px 20px; text-align: center; color: #333; }
+  #empty   { padding: 60px 20px; text-align: center; color: #333; }
+  #loading { padding: 40px 20px; text-align: center; color: #444; font-size: 12px; }
 </style>
 </head>
 <body>
 
 <header>
-  <a href="/">← Live feed</a>
+  <a href="/">&#x2190; Live feed</a>
   <span id="count"></span>
-  <input id="search" type="text" placeholder="Search hostnames..." autocomplete="off">
+  <input id="search" type="text" placeholder="Search hostnames, titles..." autocomplete="off">
 </header>
 
+<div id="date-tabs"></div>
+
 <div id="list"></div>
-<div id="empty" style="display:none">No history yet — entries appear here once processed.</div>
+<div id="loading" style="display:none">Loading...</div>
+<div id="empty" style="display:none">No entries for this day yet.</div>
 
 <div class="preview" id="preview">
   <img id="preview-img" src="" alt="">
@@ -88,47 +114,54 @@
 </div>
 
 <script>
-const list = document.getElementById('list');
-const empty = document.getElementById('empty');
-const countEl = document.getElementById('count');
+const list     = document.getElementById('list');
+const empty    = document.getElementById('empty');
+const loading  = document.getElementById('loading');
+const countEl  = document.getElementById('count');
 const searchEl = document.getElementById('search');
-const preview = document.getElementById('preview');
-const previewImg = document.getElementById('preview-img');
+const tabsEl   = document.getElementById('date-tabs');
+const preview  = document.getElementById('preview');
+const previewImg   = document.getElementById('preview-img');
 const previewLabel = document.getElementById('preview-label');
 
-let allRows = [];
+let allRows    = [];
+let activeDate = null;
+let liveInterval = null;
 
 const BADGE_CLASS = {
-  clean: 'badge-clean',
-  suspicious: 'badge-suspicious',
-  flagged: 'badge-flagged',
-  '404': 'badge-404',
-  scanning: 'badge-scanning',
+  clean: 'badge-clean', suspicious: 'badge-suspicious',
+  flagged: 'badge-flagged', '404': 'badge-404', scanning: 'badge-scanning',
 };
+
+const TAG_EMOJI = {
+  'crypto':'🪙','ai-app':'🤖','ecommerce':'🛍️','game':'🎮',
+  'saas':'🔧','portfolio':'🎨','blog':'📰','adult':'🔞','template':'🏗️',
+};
+
+function todayKey() {
+  return new Date().toISOString().slice(0, 10);
+}
 
 function formatTs(ts) {
   const d = new Date(ts);
-  return d.toLocaleString('en-AU', {
-    month: 'short', day: 'numeric',
-    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
-  });
+  return d.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
 }
 
 function screenshotUrl(entry) {
   if (entry.screenshot) return entry.screenshot;
   if (entry.scan?.urlscanId) return `https://urlscan.io/screenshots/${entry.scan.urlscanId}.png`;
-  if (entry.urlscanId) return `https://urlscan.io/screenshots/${entry.urlscanId}.png`;
   return null;
 }
 
 function buildRow(entry) {
   const row = document.createElement('div');
   row.className = 'row';
-  row.dataset.hostname = entry.hostname;
-  row.dataset.title = (entry.title || '').toLowerCase();
+  row.dataset.hostname = entry.hostname || '';
+  row.dataset.title = (entry.title || entry.meta?.title || '').toLowerCase();
 
   const ts = document.createElement('span');
   ts.className = 'ts';
+  ts.title = new Date(entry.timestamp).toISOString();
   ts.textContent = formatTs(entry.timestamp);
 
   const plt = document.createElement('span');
@@ -137,49 +170,72 @@ function buildRow(entry) {
 
   const hn = document.createElement('span');
   hn.className = 'hostname';
+  const isBad = entry.status === 'flagged' || entry.status === 'suspicious';
   const a = document.createElement('a');
-  a.href = entry.url;
-  a.target = '_blank';
-  a.rel = 'noopener noreferrer';
+  if (isBad && entry.scan?.urlscanId) {
+    a.href = `https://urlscan.io/result/${entry.scan.urlscanId}/`;
+  } else {
+    a.href = entry.url;
+  }
+  a.target = '_blank'; a.rel = 'noopener noreferrer';
   a.textContent = entry.hostname;
   hn.appendChild(a);
 
   const title = document.createElement('span');
   title.className = 'title';
-  title.textContent = entry.title || '';
+  title.textContent = entry.title || entry.meta?.title || '';
 
-  const badge = document.createElement('span');
-  badge.className = 'badge ' + (BADGE_CLASS[entry.status] || 'badge-404');
-  badge.textContent = entry.status;
+  const rowBadges = document.createElement('div');
+  rowBadges.className = 'row-badges';
+
+  const sb = document.createElement('span');
+  sb.className = 'badge ' + (BADGE_CLASS[entry.status] || 'badge-404');
+  sb.textContent = entry.status;
+  rowBadges.appendChild(sb);
+
+  if (entry.aiTool) {
+    const b = document.createElement('span');
+    b.className = 'badge badge-ai-tool';
+    b.textContent = entry.aiTool;
+    rowBadges.appendChild(b);
+  }
+  if (entry.framework && entry.framework !== 'Static') {
+    const b = document.createElement('span');
+    b.className = 'badge badge-framework';
+    b.textContent = entry.framework;
+    rowBadges.appendChild(b);
+  }
+  for (const tag of (entry.contentTags || [])) {
+    const b = document.createElement('span');
+    b.className = 'badge badge-tag';
+    b.textContent = (TAG_EMOJI[tag] || '') + ' ' + tag;
+    rowBadges.appendChild(b);
+  }
 
   row.appendChild(ts);
   row.appendChild(plt);
   row.appendChild(hn);
   row.appendChild(title);
-  row.appendChild(badge);
+  row.appendChild(rowBadges);
 
-  row.addEventListener('mouseenter', (e) => {
-    const src = screenshotUrl(entry);
-    if (src) {
+  const src = screenshotUrl(entry);
+  if (src) {
+    row.addEventListener('mouseenter', e => {
       previewImg.src = src;
-      previewImg.style.display = 'block';
-    } else {
-      previewImg.style.display = 'none';
-    }
-    previewLabel.textContent = entry.hostname;
-    positionPreview(e);
-    preview.style.display = 'block';
-  });
-  row.addEventListener('mousemove', positionPreview);
-  row.addEventListener('mouseleave', () => { preview.style.display = 'none'; });
+      previewLabel.textContent = entry.title || entry.hostname;
+      positionPreview(e);
+      preview.style.display = 'block';
+    });
+    row.addEventListener('mousemove', positionPreview);
+    row.addEventListener('mouseleave', () => { preview.style.display = 'none'; });
+  }
 
   return row;
 }
 
 function positionPreview(e) {
   const pad = 16, pw = 320, ph = 220;
-  let x = e.clientX + pad;
-  let y = e.clientY + pad;
+  let x = e.clientX + pad, y = e.clientY + pad;
   if (x + pw > window.innerWidth)  x = e.clientX - pw - pad;
   if (y + ph > window.innerHeight) y = e.clientY - ph - pad;
   preview.style.left = x + 'px';
@@ -199,34 +255,96 @@ function applySearch(query) {
 
 searchEl.addEventListener('input', () => applySearch(searchEl.value));
 
-const seenHostnames = new Set();
+// ---- Date tabs ----
 
-function loadHistory() {
-  fetch('/api/history')
-    .then(r => r.json())
-    .then(entries => {
-      empty.style.display = 'none';
-      const frag = document.createDocumentFragment();
-      let added = 0;
-      for (const entry of entries) {
-        if (seenHostnames.has(entry.hostname)) continue;
-        seenHostnames.add(entry.hostname);
-        const row = buildRow(entry);
-        allRows.push(row);
-        frag.appendChild(row);
-        added++;
-      }
-      if (added) {
-        list.prepend(frag);
-        applySearch(searchEl.value);
-      }
-      if (!allRows.length) empty.style.display = '';
-    })
-    .catch(() => { if (!allRows.length) empty.style.display = ''; });
+function renderTabs(dates) {
+  tabsEl.innerHTML = '';
+  for (const d of dates) {
+    const btn = document.createElement('button');
+    btn.className = 'date-tab' + (d === activeDate ? ' active' : '');
+    btn.dataset.date = d;
+    btn.textContent = d === todayKey() ? `Today (${d})` : d;
+    btn.addEventListener('click', () => loadDate(d));
+    tabsEl.appendChild(btn);
+  }
 }
 
-loadHistory();
-setInterval(loadHistory, 30_000);
+function clearList() {
+  list.innerHTML = '';
+  allRows = [];
+  empty.style.display = 'none';
+}
+
+// Seen hostnames for dedup on today's live data
+const seenHostnames = new Set();
+
+function renderEntries(entries, dedupByHostname) {
+  const frag = document.createDocumentFragment();
+  let added = 0;
+  for (const entry of entries) {
+    if (dedupByHostname) {
+      if (seenHostnames.has(entry.hostname)) continue;
+      seenHostnames.add(entry.hostname);
+    }
+    const row = buildRow(entry);
+    allRows.push(row);
+    frag.appendChild(row);
+    added++;
+  }
+  list.appendChild(frag);
+  if (added) applySearch(searchEl.value);
+  if (!allRows.length) empty.style.display = '';
+}
+
+function loadDate(dateKey) {
+  if (activeDate === dateKey) return;
+  activeDate = dateKey;
+
+  if (liveInterval) { clearInterval(liveInterval); liveInterval = null; }
+  seenHostnames.clear();
+  clearList();
+
+  document.querySelectorAll('.date-tab').forEach(b => {
+    b.classList.toggle('active', b.dataset.date === dateKey);
+  });
+
+  const isToday = dateKey === todayKey();
+  loading.style.display = '';
+
+  const url = isToday ? '/api/history' : `/api/history?date=${dateKey}`;
+  fetch(url)
+    .then(r => r.json())
+    .then(entries => {
+      loading.style.display = 'none';
+      renderEntries(entries, isToday);
+      if (isToday) {
+        liveInterval = setInterval(() => {
+          fetch('/api/history')
+            .then(r => r.json())
+            .then(fresh => renderEntries(fresh, true))
+            .catch(() => {});
+        }, 30_000);
+      }
+    })
+    .catch(() => {
+      loading.style.display = 'none';
+      empty.style.display = '';
+    });
+}
+
+// Bootstrap: fetch available dates then load today (index 0 = newest)
+fetch('/api/history/dates')
+  .then(r => r.json())
+  .then(dates => {
+    if (!dates.length) dates = [todayKey()];
+    renderTabs(dates);
+    loadDate(dates[0]);
+  })
+  .catch(() => {
+    const today = todayKey();
+    renderTabs([today]);
+    loadDate(today);
+  });
 </script>
 </body>
 </html>

@@ -13,12 +13,12 @@ const { writeEntry, reportToAbuseIPDB } = require('./lib/threat-intel.js');
 const { recordAndCheck, buildMailtoLink } = require('./lib/upstash.js');
 const { getScreenshot } = require('./lib/screenshot.js');
 const { extractFromUrlscan, fetchFavicon } = require('./lib/metadata.js');
-const { detectAiTool, detectFramework } = require('./lib/fingerprint.js');
+const { detectAiTool, detectFramework, detectContentTags } = require('./lib/fingerprint.js');
 const { Broadcaster } = require('./lib/broadcaster.js');
 const { computeStats, detectTrending } = require('./lib/stats.js');
 const { sendWebhook } = require('./lib/webhook.js');
 const { buildRss } = require('./lib/rss.js');
-const { appendHistory, readHistory } = require('./lib/history.js');
+const { appendHistory, readHistory, readDay, listDates } = require('./lib/history.js');
 
 const PORT = process.env.PORT || 3000;
 const URLSCAN_KEY = process.env.URLSCAN_KEY || null;
@@ -27,6 +27,33 @@ const WEBHOOK_URL = process.env.WEBHOOK_URL || null;
 
 const queue = new JobQueue();
 const broadcaster = new Broadcaster();
+
+// One-time migration: move legacy history.ndjson into the per-day history/ directory
+{
+  const fs = require('node:fs');
+  const legacyFile = path.join(__dirname, 'history.ndjson');
+  if (fs.existsSync(legacyFile)) {
+    try {
+      const lines = fs.readFileSync(legacyFile, 'utf8').trim().split('\n').filter(Boolean);
+      const byDay = {};
+      for (const line of lines) {
+        try {
+          const e = JSON.parse(line);
+          const day = (e.timestamp || new Date().toISOString()).slice(0, 10);
+          (byDay[day] = byDay[day] || []).push(line);
+        } catch (_) {}
+      }
+      for (const [day, dayLines] of Object.entries(byDay)) {
+        const dest = path.join(__dirname, 'history', `${day}.ndjson`);
+        fs.appendFileSync(dest, dayLines.join('\n') + '\n');
+      }
+      fs.renameSync(legacyFile, legacyFile + '.migrated');
+      console.log(`[history] migrated legacy history.ndjson (${lines.length} entries) into history/`);
+    } catch (err) {
+      console.warn('[history] migration failed:', err.message);
+    }
+  }
+}
 
 // Restore recent history into queue so the feed isn't empty after a restart
 {
@@ -130,6 +157,7 @@ async function processEntry(entry) {
     meta,
     framework: detectFramework(dom, headers),
     aiTool: detectAiTool(dom),
+    contentTags: detectContentTags(dom, meta),
     threatIntel: status === 'suspicious' ? {
       c2Ips: scan?.c2Ips || [],
       redirectDomains: scan?.redirectDomains || [],
@@ -186,9 +214,21 @@ app.get('/api/stats', (req, res) => {
 });
 
 
+// List available history dates
+app.get('/api/history/dates', (req, res) => {
+  res.json(listDates());
+});
+
 app.get('/api/history', (req, res) => {
-  // Merge disk history with completed in-memory entries (newest first, deduped by hostname)
-  const disk = readHistory(1000);
+  const dateKey = req.query.date || null;
+
+  if (dateKey) {
+    // Past day — read from disk only, no dedup needed
+    return res.json(readDay(dateKey));
+  }
+
+  // Today — merge disk (today only) with completed in-memory entries, deduped
+  const disk = readDay(); // today
   const diskHostnames = new Set(disk.map(e => e.hostname));
   const mem = queue.getAll()
     .filter(e => !diskHostnames.has(e.hostname) && e.status !== 'pending' && e.status !== 'scanning')
@@ -203,10 +243,10 @@ app.get('/api/history', (req, res) => {
       screenshot: e.screenshot || null,
       screenshotSource: e.screenshotSource || null,
       scan: e.scan || null,
+      contentTags: e.contentTags || null,
     }));
   const combined = [...mem, ...disk]
-    .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
-    .slice(0, 1000);
+    .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
   res.json(combined);
 });
 

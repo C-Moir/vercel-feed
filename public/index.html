@@ -81,6 +81,20 @@
     .badge.framework  { background: #1a1a2e; color: #6c63ff; border-color: #2a2a4e; }
     .badge.ai-tool    { background: #1a002e; color: #c084fc; border-color: #3a0060; }
     .badge.platform   { font-size: 9px; padding: 1px 5px; border-color: #222; color: #555; }
+    .badge.tag-crypto   { background: #1a1400; color: #f0b429; border-color: #3a2a00; }
+    .badge.tag-ai-app   { background: #001a18; color: #34d399; border-color: #003a30; }
+    .badge.tag-ecommerce{ background: #001a2e; color: #60a5fa; border-color: #00284a; }
+    .badge.tag-game     { background: #1a001a; color: #e879f9; border-color: #3a003a; }
+    .badge.tag-saas     { background: #0d1a00; color: #a3e635; border-color: #1a3a00; }
+    .badge.tag-portfolio{ background: #1a0a00; color: #fb923c; border-color: #3a1a00; }
+    .badge.tag-blog     { background: #001a1a; color: #22d3ee; border-color: #003a3a; }
+    .badge.tag-adult    { background: #2a0000; color: #f87171; border-color: #5a0000; }
+    .badge.tag-template { background: #111111; color: #6b7280; border-color: #222222; }
+
+    #tag-filters {
+      padding: 6px 20px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center;
+      background: #0d0d18; border-bottom: 1px solid #111;
+    }
 
     .card-desc { font-size: 11px; color: #555; margin-bottom: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .card-host { font-size: 10px; color: #444; font-family: monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
@@ -135,6 +149,18 @@
   <a href="/map" class="filter-btn">3D Map</a>
 </div>
 
+<div id="tag-filters">
+  <button class="filter-btn" data-tag="crypto">🪙 Crypto</button>
+  <button class="filter-btn" data-tag="ai-app">🤖 AI App</button>
+  <button class="filter-btn" data-tag="ecommerce">🛍️ Shop</button>
+  <button class="filter-btn" data-tag="game">🎮 Game</button>
+  <button class="filter-btn" data-tag="saas">🔧 SaaS</button>
+  <button class="filter-btn" data-tag="portfolio">🎨 Portfolio</button>
+  <button class="filter-btn" data-tag="blog">📰 Blog</button>
+  <button class="filter-btn" data-tag="adult">🔞 Adult</button>
+  <button class="filter-btn" data-tag="template">🏗️ Template</button>
+</div>
+
 <div id="feed"></div>
 <div id="empty-state" style="display:none">
   Waiting for new deployments...
@@ -145,7 +171,20 @@
 <script>
 const entries = new Map();
 let activeFilter = 'all';
+let activeTag = null;
 let searchQuery = '';
+
+const TAG_META = {
+  'crypto':    { label: 'Crypto',    emoji: '🪙' },
+  'ai-app':    { label: 'AI App',    emoji: '🤖' },
+  'ecommerce': { label: 'Shop',      emoji: '🛍️' },
+  'game':      { label: 'Game',      emoji: '🎮' },
+  'saas':      { label: 'SaaS',      emoji: '🔧' },
+  'portfolio': { label: 'Portfolio', emoji: '🎨' },
+  'blog':      { label: 'Blog',      emoji: '📰' },
+  'adult':     { label: 'Adult',     emoji: '🔞' },
+  'template':  { label: 'Template',  emoji: '🏗️' },
+};
 
 // Restore from sessionStorage so navigating away and back doesn't wipe the feed
 try {
@@ -170,6 +209,7 @@ function statusClass(status) {
 }
 
 function buildCard(entry) {
+  const tags = entry.contentTags || [];
   const card = el('div', {
     class: `card ${entry.status === '404' ? '' : entry.status}`,
     id: `card-${entry.id}`,
@@ -177,7 +217,8 @@ function buildCard(entry) {
     'data-hostname': entry.hostname,
     'data-platform': (entry.platform || '').toLowerCase(),
     'data-title': (entry.meta?.title || '').toLowerCase(),
-    'data-has-screenshot': entry.screenshot ? '1' : '0'
+    'data-has-screenshot': entry.screenshot ? '1' : '0',
+    'data-tags': tags.join(' '),
   });
 
   // Screenshot — only show for non-flagged or if it's a URLScan URL (sandboxed)
@@ -211,6 +252,10 @@ function buildCard(entry) {
   if (entry.platform) badges.appendChild(badge(entry.platform, 'platform'));
   if (entry.framework) badges.appendChild(badge(entry.framework, 'framework'));
   if (entry.aiTool) badges.appendChild(badge(entry.aiTool, 'ai-tool'));
+  for (const tag of tags) {
+    const m = TAG_META[tag];
+    if (m) badges.appendChild(badge(`${m.emoji} ${m.label}`, `tag-${tag}`));
+  }
   header.appendChild(badges);
   body.appendChild(header);
 
@@ -294,11 +339,12 @@ function applyFilters() {
       activeFilter === 'previews' ? (card.dataset.hasScreenshot === '1' && s !== '404') :
       activeFilter === 'all'      ? s !== '404' :
       s === activeFilter;
+    const matchTag = !activeTag || (card.dataset.tags || '').split(' ').includes(activeTag);
     const matchSearch = !searchQuery
       || card.dataset.hostname.includes(searchQuery)
       || card.dataset.title.includes(searchQuery)
       || card.dataset.platform.includes(searchQuery);
-    const show = matchFilter && matchSearch;
+    const show = matchFilter && matchTag && matchSearch;
     card.style.display = show ? '' : 'none';
     if (show) visible++;
   });
@@ -330,6 +376,22 @@ document.querySelectorAll('.filter-btn[data-filter]').forEach(btn => {
     document.querySelectorAll('.filter-btn[data-filter]').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     activeFilter = btn.dataset.filter;
+    applyFilters();
+  });
+});
+
+document.querySelectorAll('.filter-btn[data-tag]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const tag = btn.dataset.tag;
+    if (activeTag === tag) {
+      // toggle off
+      activeTag = null;
+      btn.classList.remove('active');
+    } else {
+      document.querySelectorAll('.filter-btn[data-tag]').forEach(b => b.classList.remove('active'));
+      activeTag = tag;
+      btn.classList.add('active');
+    }
     applyFilters();
   });
 });
