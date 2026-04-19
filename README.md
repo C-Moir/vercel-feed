@@ -31,7 +31,7 @@ For platforms that issue per-deployment certs (Cloudflare Pages, Workers, Render
 ## Install
 
 ```bash
-git clone https://github.com/C-Moir/deploy-feed
+git clone https://github.com/C-Moir/deployment-feed
 cd deploy-feed
 npm install
 npx playwright install chromium   # for screenshots

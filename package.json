@@ -1,5 +1,5 @@
 {
-  "name": "vercel-feed",
+  "name": "deployment-feed",
   "version": "0.1.0",
   "description": "Live feed of Vercel deployments with security scanning and AI tool detection",
   "main": "index.js",
