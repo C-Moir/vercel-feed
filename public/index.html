@@ -147,6 +147,12 @@ const entries = new Map();
 let activeFilter = 'all';
 let searchQuery = '';
 
+// Restore from sessionStorage so navigating away and back doesn't wipe the feed
+try {
+  const cached = JSON.parse(sessionStorage.getItem('df-entries') || '[]');
+  for (const e of cached) entries.set(e.id, e);
+} catch (_) {}
+
 function el(tag, attrs, text) {
   const e = document.createElement(tag);
   if (attrs) for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
@@ -254,8 +260,18 @@ function buildCard(entry) {
   return card;
 }
 
+function saveToSession() {
+  try {
+    const recent = [...entries.values()]
+      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+      .slice(0, 200);
+    sessionStorage.setItem('df-entries', JSON.stringify(recent));
+  } catch (_) {}
+}
+
 function upsertCard(entry) {
   entries.set(entry.id, entry);
+  saveToSession();
   const existing = document.getElementById(`card-${entry.id}`);
   const card = buildCard(entry);
   const feed = document.getElementById('feed');
@@ -339,8 +355,18 @@ function connect() {
   });
 }
 
-// Show empty state on initial load
-document.getElementById('empty-state').style.display = '';
+// Render any cached entries immediately before SSE connects
+if (entries.size) {
+  const sorted = [...entries.values()].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+  for (const e of sorted) {
+    const card = buildCard(e);
+    document.getElementById('feed').appendChild(card);
+  }
+  document.getElementById('empty-state').style.display = 'none';
+  applyFilters();
+} else {
+  document.getElementById('empty-state').style.display = '';
+}
 connect();
 </script>
 </body>
