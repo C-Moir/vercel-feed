@@ -10,11 +10,11 @@ const { connect: connectCertstream } = require('./lib/certstream.js');
 const { connect: connectGitHubPages } = require('./lib/github-pages.js');
 
 const { checkUrlhaus, submitUrlscan, pollUrlscan, extractScanData } = require('./lib/scanner.js');
-const { writeEntry, reportToAbuseIPDB } = require('./lib/threat-intel.js');
+const { writeEntry } = require('./lib/threat-intel.js');
 const { recordAndCheck, buildMailtoLink } = require('./lib/upstash.js');
 const { getScreenshot } = require('./lib/screenshot.js');
-const { extractFromUrlscan, fetchFavicon } = require('./lib/metadata.js');
-const { detectAiTool, detectFramework, detectContentTags } = require('./lib/fingerprint.js');
+const { fetchFavicon, fetchDom, extractTitle, extractMetaDescription } = require('./lib/metadata.js');
+const { detectAiTool, detectFramework, detectContentTags, detectSuspiciousHostname } = require('./lib/fingerprint.js');
 const { Broadcaster } = require('./lib/broadcaster.js');
 const { computeStats, detectTrending } = require('./lib/stats.js');
 const { sendWebhook } = require('./lib/webhook.js');
@@ -23,7 +23,6 @@ const { appendHistory, readHistory, readDay, listDates } = require('./lib/histor
 
 const PORT = process.env.PORT || 3000;
 const URLSCAN_KEY = process.env.URLSCAN_KEY || null;
-const ABUSEIPDB_KEY = process.env.ABUSEIPDB_KEY || null;
 const WEBHOOK_URL = process.env.WEBHOOK_URL || null;
 
 const queue = new JobQueue();
@@ -66,15 +65,9 @@ const broadcaster = new Broadcaster();
   }
 }
 
-async function preflight404(url) {
-  try {
-    const res = await fetch(url, { method: 'HEAD', signal: AbortSignal.timeout(8_000), redirect: 'follow' });
-    return res.status === 404;
-  } catch (_) {
-    return false;
-  }
-}
-
+// URLScan was previously called on every clean deployment which jammed the worker
+// pool (free tier is ~2/min). The new flow only spends URLScan credits when we
+// already have a signal: URLhaus hit, or a hostname that looks like phishing.
 async function processEntry(entry) {
   // Helper: get the live queue entry, fall back to the snapshot we have.
   // Entries can be evicted from RAM (MAX_ALL_SIZE cap) while a worker is mid-flight.
@@ -83,16 +76,7 @@ async function processEntry(entry) {
   queue.update(entry.id, { status: 'scanning' });
   broadcaster.broadcast(get());
 
-  // Skip dead deployments - saves URLScan credits and keeps feed clean
-  if (await preflight404(entry.url)) {
-    queue.update(entry.id, { status: '404' });
-    const e404 = get();
-    broadcaster.broadcast(e404);
-    appendHistory(e404);
-    return;
-  }
-
-  // URLhaus fast check
+  // URLhaus fast check — confirmed malicious, worth a URLScan credit
   const { flagged } = await checkUrlhaus(entry.url);
 
   if (flagged) {
@@ -125,9 +109,9 @@ async function processEntry(entry) {
       ...patch.threatIntel
     });
 
-    for (const ip of patch.threatIntel.c2Ips) {
-      await reportToAbuseIPDB(ip, ABUSEIPDB_KEY);
-    }
+    // AbuseIPDB auto-reporting disabled: scanner.js currently treats every
+    // non-Vercel IP as C2, so reporting would spam CDN operators with false
+    // positives. Re-enable once extractScanData uses real URLScan verdicts.
 
     const confirmedBy = await recordAndCheck(entry.url);
     if (confirmedBy) {
@@ -141,42 +125,55 @@ async function processEntry(entry) {
     return;
   }
 
-  // URLScan deep scan
-  const uuid = await submitUrlscan(entry.url, URLSCAN_KEY);
-  const result = uuid ? await pollUrlscan(uuid) : null;
-  const scan = extractScanData(result);
-  const status = !scan ? 'clean' : scan.score > 50 ? 'suspicious' : 'clean';
+  // Clean path: direct fetch, no URLScan credits spent
+  const { dom, headers, status: httpStatus } = await fetchDom(entry.url);
 
-  const meta = extractFromUrlscan(result);
-  meta.favicon = await fetchFavicon(entry.url);
+  if (httpStatus === 404) {
+    queue.update(entry.id, { status: '404' });
+    const e404 = get();
+    broadcaster.broadcast(e404);
+    appendHistory(e404);
+    return;
+  }
 
-  const dom = result?.dom || '';
-  const headers = result?.data?.requests?.[0]?.response?.headers || {};
-
-  const patch = {
-    status,
-    scan: {
-      urlhausFlagged: false,
-      urlscanScore: scan?.score ?? 0,
-      urlscanId: scan?.urlscanId || uuid,
-      urlscanScreenshot: scan?.screenshot || null
-    },
-    meta,
-    framework: detectFramework(dom, headers),
-    aiTool: detectAiTool(dom),
-    contentTags: detectContentTags(dom, meta),
-    threatIntel: status === 'suspicious' ? {
-      c2Ips: scan?.c2Ips || [],
-      redirectDomains: scan?.redirectDomains || [],
-      scriptSources: scan?.scriptSources || []
-    } : null
+  const meta = {
+    title: extractTitle(dom),
+    description: extractMetaDescription(dom),
+    favicon: await fetchFavicon(entry.url),
   };
-  queue.update(entry.id, patch);
 
-  if (status === 'suspicious') {
+  const framework     = detectFramework(dom, headers);
+  const aiTool        = detectAiTool(dom);
+  const contentTags   = detectContentTags(dom, meta, entry.hostname);
+  const hostSuspicion = detectSuspiciousHostname(entry.hostname);
+  const isSuspicious  = !!hostSuspicion;
+
+  queue.update(entry.id, {
+    status: isSuspicious ? 'suspicious' : 'clean',
+    meta,
+    framework,
+    aiTool,
+    contentTags,
+    suspicionReason: hostSuspicion,
+  });
+
+  if (isSuspicious && URLSCAN_KEY) {
+    // Escalate: capture sandboxed evidence without visiting the live site ourselves
+    const uuid = await submitUrlscan(entry.url, URLSCAN_KEY);
+    const result = uuid ? await pollUrlscan(uuid) : null;
+    const scan = extractScanData(result);
+    queue.update(entry.id, {
+      scan: {
+        urlhausFlagged: false,
+        urlscanScore: scan?.score ?? 0,
+        urlscanId: scan?.urlscanId || uuid,
+        urlscanScreenshot: scan?.screenshot || null,
+      },
+      screenshot: scan?.screenshot || null,
+      screenshotSource: 'urlscan',
+    });
     await sendWebhook(get(), WEBHOOK_URL);
-    queue.update(entry.id, { screenshot: scan?.screenshot, screenshotSource: 'urlscan' });
-  } else {
+  } else if (!isSuspicious) {
     const { screenshot, source } = await getScreenshot(entry.url);
     queue.update(entry.id, { screenshot, screenshotSource: source });
   }
@@ -265,8 +262,11 @@ app.get('/map', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'map.html'));
 });
 
+// Suppress favicon.ico 404s without shipping a binary asset
+app.get('/favicon.ico', (_req, res) => res.status(204).end());
+
 app.listen(PORT, () => {
-  console.log(`vercel-feed running at http://localhost:${PORT}`);
+  console.log(`deployment-feed running at http://localhost:${PORT}`);
   if (!URLSCAN_KEY) console.log('[warn] URLSCAN_KEY not set - rate-limited scanning');
   if (!process.env.UPSTASH_REDIS_URL) console.log('[warn] Upstash not set - auto-reporting disabled');
 });

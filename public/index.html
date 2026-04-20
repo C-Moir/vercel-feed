@@ -110,7 +110,8 @@
     }
 
     .card-desc { font-size: 11px; color: #555; margin-bottom: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .card-host { font-size: 10px; color: #444; font-family: monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+    .card-host { font-size: 10px; color: #444; font-family: monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; text-decoration: none; }
+    a.card-host:hover { color: #6c63ff; text-decoration: underline; }
     .card-footer { display: flex; align-items: center; justify-content: space-between; }
 
     .card-actions { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
@@ -181,8 +182,8 @@
 
 <div id="feed"></div>
 <div id="empty-state" style="display:none">
-  Waiting for new deployments...
-  <small>Live feed starts empty — cards appear as new certs are issued</small>
+  <span id="empty-title">Waiting for new deployments...</span>
+  <small id="empty-hint">Live feed starts empty — cards appear as new certs are issued</small>
 </div>
 <div id="status-dot">Connecting...</div>
 
@@ -281,8 +282,21 @@ function buildCard(entry) {
     body.appendChild(el('div', { class: 'card-desc' }, entry.meta.description));
   }
 
+  // Hostname: clickable for safe statuses, text-only for flagged/suspicious
+  // (we never auto-link users to sites that may be phishing)
   const footer = el('div', { class: 'card-footer' });
-  footer.appendChild(el('span', { class: 'card-host' }, entry.hostname));
+  const unsafe = entry.status === 'flagged' || entry.status === 'suspicious';
+  if (unsafe) {
+    footer.appendChild(el('span', { class: 'card-host' }, entry.hostname));
+  } else {
+    const link = el('a', {
+      class: 'card-host',
+      href: entry.url,
+      target: '_blank',
+      rel: 'noopener noreferrer',
+    }, entry.hostname);
+    footer.appendChild(link);
+  }
   body.appendChild(footer);
 
   if (entry.threatIntel?.c2Ips?.length) {
@@ -371,7 +385,20 @@ function applyFilters() {
 
   const emptyState = document.getElementById('empty-state');
   const feed = document.getElementById('feed');
-  emptyState.style.display = (visible === 0 && feed.children.length === 0) ? '' : 'none';
+  const emptyTitle = document.getElementById('empty-title');
+  const emptyHint = document.getElementById('empty-hint');
+  if (visible === 0) {
+    if (feed.children.length === 0) {
+      emptyTitle.textContent = 'Waiting for new deployments...';
+      emptyHint.textContent = 'Live feed starts empty — cards appear as new certs are issued';
+    } else {
+      emptyTitle.textContent = 'No deployments match this filter';
+      emptyHint.textContent = 'Clear filters, broaden the search, or wait for new cards';
+    }
+    emptyState.style.display = '';
+  } else {
+    emptyState.style.display = 'none';
+  }
 }
 
 function renderStats(stats) {

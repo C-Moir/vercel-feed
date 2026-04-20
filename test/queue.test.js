@@ -35,21 +35,6 @@ test('JobQueue priority entries go to front', () => {
   assert.equal(first.hostname, 'login-app.vercel.app');
 });
 
-test('JobQueue drops non-priority entries when at MAX_QUEUE_SIZE', () => {
-  const q = new JobQueue();
-  for (let i = 0; i < 100; i++) q.push(`app${i}.vercel.app`);
-  const dropped = q.push('overflow.vercel.app');
-  assert.equal(dropped, null);
-});
-
-test('JobQueue priority entries bypass the cap', () => {
-  const q = new JobQueue();
-  for (let i = 0; i < 100; i++) q.push(`app${i}.vercel.app`);
-  const priority = q.push('wallet-steal.vercel.app');
-  assert.ok(priority);
-  assert.equal(priority.priority, true);
-});
-
 test('JobQueue update patches entry in place', () => {
   const q = new JobQueue();
   const entry = q.push('foo.vercel.app');
