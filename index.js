@@ -12,7 +12,7 @@ const { connect: connectGitHubPages } = require('./lib/github-pages.js');
 const { checkUrlhaus, submitUrlscan, pollUrlscan, extractScanData } = require('./lib/scanner.js');
 const { writeEntry } = require('./lib/threat-intel.js');
 const { recordAndCheck, buildMailtoLink } = require('./lib/upstash.js');
-const { getScreenshot } = require('./lib/screenshot.js');
+const { getScreenshot, closeBrowser } = require('./lib/screenshot.js');
 const { fetchFavicon, fetchDom, extractTitle, extractMetaDescription } = require('./lib/metadata.js');
 const { detectAiTool, detectFramework, detectContentTags, detectSuspiciousHostname } = require('./lib/fingerprint.js');
 const { Broadcaster } = require('./lib/broadcaster.js');
@@ -270,6 +270,15 @@ app.listen(PORT, () => {
   if (!URLSCAN_KEY) console.log('[warn] URLSCAN_KEY not set - rate-limited scanning');
   if (!process.env.UPSTASH_REDIS_URL) console.log('[warn] Upstash not set - auto-reporting disabled');
 });
+
+// Tidy shutdown — chromium is expensive to leave dangling
+for (const sig of ['SIGINT', 'SIGTERM']) {
+  process.on(sig, async () => {
+    console.log(`[exit] ${sig} received, closing browser`);
+    await closeBrowser();
+    process.exit(0);
+  });
+}
 
 setInterval(() => {
   broadcaster.broadcastStats(computeStats(queue.getAll()));
