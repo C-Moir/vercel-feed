@@ -153,6 +153,7 @@
 
 <div id="filters">
   <button class="filter-btn active" data-filter="all">All</button>
+  <button class="filter-btn" data-filter="interesting">✨ Interesting</button>
   <button class="filter-btn" data-filter="previews">Previews</button>
   <button class="filter-btn" data-filter="clean">Clean</button>
   <button class="filter-btn" data-filter="suspicious">Suspicious</button>
@@ -352,9 +353,11 @@ function applyFilters() {
   let visible = 0;
   document.querySelectorAll('.card').forEach(card => {
     const s = card.dataset.status;
+    const tags = (card.dataset.tags || '').trim();
     const matchFilter =
-      activeFilter === 'previews' ? (card.dataset.hasScreenshot === '1' && s !== '404') :
-      activeFilter === 'all'      ? s !== '404' :
+      activeFilter === 'interesting' ? (s !== '404' && s !== 'pending' && s !== 'scanning' && tags.length > 0) :
+      activeFilter === 'previews'    ? (card.dataset.hasScreenshot === '1' && s !== '404') :
+      activeFilter === 'all'         ? s !== '404' :
       s === activeFilter;
     const matchTag = !activeTag || (card.dataset.tags || '').split(' ').includes(activeTag);
     const matchSearch = !searchQuery

@@ -7,6 +7,7 @@ const path = require('node:path');
 
 const { JobQueue } = require('./lib/queue.js');
 const { connect: connectCertstream } = require('./lib/certstream.js');
+const { connect: connectGitHubPages } = require('./lib/github-pages.js');
 
 const { checkUrlhaus, submitUrlscan, pollUrlscan, extractScanData } = require('./lib/scanner.js');
 const { writeEntry, reportToAbuseIPDB } = require('./lib/threat-intel.js');
@@ -275,3 +276,4 @@ const WORKER_COUNT = 5;
 for (let i = 0; i < WORKER_COUNT; i++) runWorker();
 
 connectCertstream(queue, (entry) => broadcaster.broadcast(entry));
+connectGitHubPages(queue, (entry) => broadcaster.broadcast(entry));

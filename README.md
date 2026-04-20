@@ -6,7 +6,7 @@ A real-time live ledger of new deployments across 12 free hosting platforms - wi
 
 ## What it does
 
-- **Real-time** - polls 4 Certificate Transparency logs (2 Google, 2 Cloudflare Nimbus) every 10s. New deployments appear within seconds of their TLS cert being issued
+- **Real-time** - polls 3 Certificate Transparency logs (Google Argon/Xenon + Cloudflare Nimbus) every 10s, plus the GitHub Events API for GitHub Pages. New deployments appear within seconds
 - **12 platforms** - Vercel, Netlify, Cloudflare Pages, Cloudflare Workers, Render, GitHub Pages, Glitch, Replit, Surge, Deno Deploy, Railway, Fly.io
 - **Security scanning** - URLhaus fast check + URLScan.io deep scan. Flagged sites are never directly linked, only via URLScan's sandbox
 - **Content tagging** - 9 categories detected from page content: Crypto/Web3, AI App, E-commerce, Game, SaaS/Tool, Portfolio, Blog/Media, Adult, Template
@@ -49,7 +49,8 @@ Progressive - each step unlocks more features. Nothing is required to start.
 
 | What to add | What it unlocks |
 |-------------|----------------|
-| `node index.js` | Live feed with CT log detection |
+| `node index.js` | Live feed with CT log detection + GitHub Pages |
+| `GITHUB_TOKEN` | GitHub Pages polling every 30s instead of 65s (free, no scopes needed) |
 | `URLSCAN_KEY` | Full security scanning (free at urlscan.io) |
 | `npx playwright install chromium` | Local screenshots of clean sites |
 | `UPSTASH_REDIS_URL` + `UPSTASH_REDIS_TOKEN` | Consensus abuse reporting |
