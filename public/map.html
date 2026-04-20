@@ -132,17 +132,6 @@
     text-shadow: 0 0 12px rgba(100,100,255,0.8), 0 0 4px rgba(0,0,0,1);
     pointer-events: none; user-select: none;
   }
-  .platform-label.offline {
-    color: #444; text-shadow: none; font-weight: 400;
-  }
-  .platform-label.offline::after {
-    content: ' ·  offline'; font-size: 9px; color: #333;
-    letter-spacing: 1px; font-weight: 400;
-  }
-  .offline-notice {
-    background: #1a1000; border: 1px solid #3a2800; border-radius: 8px;
-    padding: 10px 12px; font-size: 11px; color: #886644; line-height: 1.5;
-  }
 </style>
 </head>
 <body>
@@ -211,18 +200,14 @@ import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer
 // planetR = visual size of the planet sphere
 // sceneR  = distance from scene origin
 const PLATFORMS = [
-  { name: 'Vercel',   color: 0xcccccc, orbitR: 12, tilt: 0.25, planetR: 3.5, sceneR: 50 },
-  { name: 'GitHub',   color: 0x9b59b6, orbitR: 10, tilt: 0.85, planetR: 3.0, sceneR: 55 },
-  { name: 'Netlify',  color: 0x00d4c8, orbitR:  9, tilt: 1.30, planetR: 2.8, sceneR: 57 },
-  { name: 'CF Pages', color: 0xf6821f, orbitR:  8, tilt: 0.55, planetR: 2.4, sceneR: 62 },
-  { name: 'Replit',   color: 0xf26207, orbitR:  7, tilt: 1.10, planetR: 2.1, sceneR: 66 },
-  { name: 'Render',   color: 0x46e3b7, orbitR:  6, tilt: 0.40, planetR: 1.9, sceneR: 69 },
-  { name: 'Railway',  color: 0xa855f7, orbitR:  5, tilt: 1.55, planetR: 1.7, sceneR: 72 },
-  { name: 'Fly.io',   color: 0x7b2bf9, orbitR:  5, tilt: 0.70, planetR: 1.6, sceneR: 74 },
-  { name: 'Deno',     color: 0x70ffaf, orbitR:  5, tilt: 1.20, planetR: 1.5, sceneR: 74 },
-  { name: 'Glitch',   color: 0x5555ff, orbitR:  4, tilt: 0.90, planetR: 1.3, sceneR: 77 },
-  { name: 'Surge',    color: 0x6bbe3f, orbitR:  4, tilt: 0.30, planetR: 1.2, sceneR: 77 },
-  { name: 'Workers',  color: 0xf6821f, orbitR:  4, tilt: 1.70, planetR: 1.3, sceneR: 77 },
+  { name: 'CF Pages', color: 0xf6821f, orbitR: 10, tilt: 0.55, planetR: 3.2, sceneR: 50 },
+  { name: 'Workers',  color: 0xffb347, orbitR:  9, tilt: 1.70, planetR: 2.8, sceneR: 56 },
+  { name: 'GitHub',   color: 0x9b59b6, orbitR:  9, tilt: 0.85, planetR: 2.6, sceneR: 62 },
+  { name: 'Render',   color: 0x46e3b7, orbitR:  7, tilt: 0.40, planetR: 2.0, sceneR: 67 },
+  { name: 'Railway',  color: 0xa855f7, orbitR:  6, tilt: 1.55, planetR: 1.8, sceneR: 71 },
+  { name: 'Fly.io',   color: 0x7b2bf9, orbitR:  6, tilt: 0.70, planetR: 1.7, sceneR: 74 },
+  { name: 'Replit',   color: 0xf26207, orbitR:  5, tilt: 1.10, planetR: 1.6, sceneR: 77 },
+  { name: 'Deno',     color: 0x70ffaf, orbitR:  5, tilt: 1.20, planetR: 1.4, sceneR: 80 },
 ];
 
 const STATUS_COLOR = {
@@ -249,10 +234,6 @@ const STATUS_SIZE = {
   flagged:    0.58,
   '404':      0.15,
 };
-
-// Platforms that use wildcard certs — invisible to CT logs, dependent on crt.sh
-// which is currently returning 502 for wildcard queries. These planets are dimmed.
-const OFFLINE_PLATFORMS = new Set(['Vercel', 'Netlify', 'Surge', 'Glitch']);
 
 // Per-platform ring normal axes (computed from tilt) used for orbital animation
 const platformRingAxes = new Map();
@@ -327,22 +308,18 @@ PLATFORMS.forEach((p, i) => {
   const axis = new THREE.Vector3(Math.sin(p.tilt), Math.cos(p.tilt), 0).normalize();
   platformRingAxes.set(p.name, axis);
 
-  // Planet sphere — solid, prominent
-  const offline = OFFLINE_PLATFORMS.has(p.name);
+  // Planet sphere
   const planetGeom = new THREE.SphereGeometry(p.planetR, 32, 24);
   const planetMat = new THREE.MeshStandardMaterial({
-    color: offline ? 0x222228 : p.color,
-    emissive: offline ? 0x111114 : p.color,
-    emissiveIntensity: offline ? 0.04 : 0.15,
-    roughness: offline ? 0.95 : 0.6,
-    metalness: offline ? 0.1 : 0.3,
-    transparent: offline,
-    opacity: offline ? 0.45 : 1.0,
+    color: p.color,
+    emissive: p.color,
+    emissiveIntensity: 0.15,
+    roughness: 0.6,
+    metalness: 0.3,
   });
   const planet = new THREE.Mesh(planetGeom, planetMat);
   planet.position.copy(pos);
   planet.userData.platformName = p.name;
-  planet.userData.offline = offline;
   scene.add(planet);
   planetMeshes.set(p.name, planet);
 
@@ -351,25 +328,22 @@ PLATFORMS.forEach((p, i) => {
   const ringOuter = p.orbitR * 1.1;
   const ringGeom = new THREE.RingGeometry(ringInner, ringOuter, 64);
   const ringMat = new THREE.MeshBasicMaterial({
-    color: offline ? 0x222228 : p.color,
-    side: THREE.DoubleSide, transparent: true,
-    opacity: offline ? 0.03 : 0.12,
+    color: p.color, side: THREE.DoubleSide, transparent: true, opacity: 0.12,
   });
   const ring = new THREE.Mesh(ringGeom, ringMat);
   ring.position.copy(pos);
-  // Tilt the ring disc to match the platform's ring axis
   ring.lookAt(pos.clone().add(axis));
   scene.add(ring);
 
   // Point light
-  const light = new THREE.PointLight(offline ? 0x222228 : p.color, offline ? 0.3 : 3.0, 60);
+  const light = new THREE.PointLight(p.color, 3.0, 60);
   light.position.copy(pos);
   scene.add(light);
   clusterLights.push(light);
 
   // Label above planet
   const div = document.createElement('div');
-  div.className = offline ? 'platform-label offline' : 'platform-label';
+  div.className = 'platform-label';
   div.textContent = p.name;
   const label = new CSS2DObject(div);
   label.position.copy(pos);
@@ -627,7 +601,6 @@ document.getElementById('platform-modal-close').addEventListener('click', hidePl
 
 function showPlatformModal(platformName) {
   const p = PLATFORMS.find(pl => pl.name === platformName);
-  const isOffline = OFFLINE_PLATFORMS.has(platformName);
   const entries = [...nodeMap.values()]
     .filter(n => n.entry.platform === platformName)
     .sort((a, b) => new Date(b.entry.timestamp) - new Date(a.entry.timestamp));
@@ -636,19 +609,14 @@ function showPlatformModal(platformName) {
 
   const nameEl = document.getElementById('platform-modal-name');
   nameEl.textContent = platformName;
-  nameEl.style.color = isOffline ? '#555' : '#' + (p?.color || 0x6c63ff).toString(16).padStart(6, '0');
+  nameEl.style.color = '#' + (p?.color || 0x6c63ff).toString(16).padStart(6, '0');
   document.getElementById('pm-count').textContent = entries.length;
   document.getElementById('pm-flagged').textContent = flagged;
 
   const list = document.getElementById('platform-modal-list');
   list.textContent = '';
 
-  if (isOffline) {
-    const notice = document.createElement('div');
-    notice.className = 'offline-notice';
-    notice.textContent = '⚠ Data source offline — ' + platformName + ' uses wildcard TLS certs, making individual deployments invisible to CT log monitoring. Coverage resumes automatically when crt.sh wildcard queries recover.';
-    list.appendChild(notice);
-  } else if (!entries.length) {
+  if (!entries.length) {
     const empty = document.createElement('div');
     empty.style.cssText = 'color:#333;font-size:11px;padding:12px 0;text-align:center';
     empty.textContent = 'No deployments detected yet';
@@ -760,9 +728,8 @@ function animate() {
     light.intensity = 0.4 + Math.sin(t * 0.5 + i) * 0.2;
   });
 
-  // Tint planets based on per-platform flagged rate (skip offline planets)
+  // Tint planets based on per-platform flagged rate
   planetMeshes.forEach((mesh, name) => {
-    if (mesh.userData.offline) return;
     const pct = planetAlerts.get(name) || 0;
     const platformDef = PLATFORMS.find(pl => pl.name === name);
     if (pct >= 30) {
@@ -800,23 +767,29 @@ function animate() {
     }
   }
 
-  // Smooth camera focus animation
+  // Smooth camera focus animation.
+  // controls.update() is skipped during animation — OrbitControls would otherwise
+  // recalculate camera position from its internal spherical state every frame,
+  // overriding the lerp and preventing any visible movement.
   if (focusTarget) {
     focusTarget.t = Math.min(1, focusTarget.t + dt * 1.5);
     const ease = 1 - Math.pow(1 - focusTarget.t, 3); // cubic ease out
 
-    // Move orbit target to planet centre
     controls.target.lerpVectors(focusTarget.startTarget, focusTarget.pos, ease);
 
-    // Pull camera to a comfortable viewing distance from the planet
+    // Pull camera to a fixed distance from the planet, preserving approach angle
     const dir = focusTarget.startCam.clone().sub(focusTarget.pos).normalize();
     const destCam = focusTarget.pos.clone().add(dir.multiplyScalar(28));
     camera.position.lerpVectors(focusTarget.startCam, destCam, ease);
 
-    if (focusTarget.t >= 1) focusTarget = null;
+    if (focusTarget.t >= 1) {
+      focusTarget = null;
+      controls.update(); // sync OrbitControls internal state to final camera position
+    }
+  } else {
+    controls.update();
   }
 
-  controls.update();
   renderer.render(scene, camera);
   labelRenderer.render(scene, camera);
 }
