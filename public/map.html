@@ -377,6 +377,7 @@ Object.keys(STATUS_COLOR).forEach(s => { MATS[s] = makeMaterial(s); });
 // ─── Node management ─────────────────────────────────────────────────────────
 
 const nodeMap = new Map(); // id → { mesh, entry, targetPos, age }
+const MAX_NODES_PER_PLATFORM = 40; // cap so no single platform dominates visually
 
 // Place a node in the orbital ring plane around a platform planet
 // axis = ring normal (defines the ring's orientation/tilt)
@@ -408,6 +409,17 @@ function addOrUpdateNode(entry) {
   const axis = platformRingAxes.get(entry.platform) || new THREE.Vector3(0, 1, 0);
   const orbitR = platformDef?.orbitR ?? 6;
   const planetR = platformDef?.planetR ?? 2;
+
+  // Enforce per-platform cap — evict oldest node when full
+  const platformNodes = [...nodeMap.entries()]
+    .filter(([, n]) => n.entry.platform === entry.platform)
+    .sort((a, b) => a[1].born - b[1].born);
+  if (platformNodes.length >= MAX_NODES_PER_PLATFORM) {
+    const [evictId, evictNode] = platformNodes[0];
+    scene.remove(evictNode.mesh);
+    nodeMap.delete(evictId);
+  }
+
   const targetOffset = randomInRing(planetR * 1.6, orbitR, 0.8, axis);
   const targetPos = clusterPos.clone().add(targetOffset);
 
